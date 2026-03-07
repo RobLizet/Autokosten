@@ -975,7 +975,7 @@ async function haalPrijzenOp(){
         'anthropic-dangerous-direct-browser-access': 'true'
       },
       body: JSON.stringify({
-        model: 'claude-sonnet-4-5-20251001',
+        model: 'claude-haiku-4-5-20251001',
         max_tokens: 1024,
         tools: [{ type: 'web_search_20250305', name: 'web_search' }],
         system: 'Je zoekt actuele brandstofprijzen op via het web en geeft UITSLUITEND een JSON-object terug. Geen uitleg, geen markdown, geen code blocks. Alleen: {"nl": 2.29, "de": 1.75, "be": 1.72}',
