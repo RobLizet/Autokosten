@@ -154,7 +154,7 @@ const LANDEN = [
 ];
 
 const defaultData = {
-  prijzen:    {nl:1.89, de:1.62, be:1.68},
+  prijzen:    {nl:2.29, de:2.00, be:1.74},
   kostenPerKm:0.25,
   apk: {peugeot:'', ford:''},
   tankbeurten:[],
@@ -971,15 +971,17 @@ async function haalPrijzenOp(){
         'Content-Type': 'application/json',
         'x-api-key': apiKey,
         'anthropic-version': '2023-06-01',
+        'anthropic-beta': 'interleaved-thinking-2025-05-14',
         'anthropic-dangerous-direct-browser-access': 'true'
       },
       body: JSON.stringify({
-        model: 'claude-haiku-4-5-20251001',
-        max_tokens: 200,
-        system: 'Geef uitsluitend een JSON-object terug. Geen uitleg, geen markdown, geen code blocks. Alleen de raw JSON.',
+        model: 'claude-sonnet-4-5-20251001',
+        max_tokens: 1024,
+        tools: [{ type: 'web_search_20250305', name: 'web_search' }],
+        system: 'Je zoekt actuele brandstofprijzen op via het web en geeft UITSLUITEND een JSON-object terug. Geen uitleg, geen markdown, geen code blocks. Alleen: {"nl": 2.29, "de": 1.75, "be": 1.72}',
         messages: [{
           role: 'user',
-          content: 'Wat zijn de huidige gemiddelde Euro95 benzineprijzen per liter (in euro) in Nederland, Duitsland en Belgie? Geef alleen JSON: {"nl": 2.29, "de": 1.95, "be": 1.85} met de meest recente prijzen die je kent. Gebruik een punt als decimaalscheiding.'
+          content: 'Zoek vandaag (' + today() + ') de actuele gemiddelde Euro95 pompprijs per liter in Nederland (GLA unitedconsumers of anwb), Duitsland en Belgie. Geef alleen JSON terug: {"nl": X.XXX, "de": X.XXX, "be": X.XXX} met punten als decimaalscheiding.'
         }]
       })
     });
@@ -991,28 +993,38 @@ async function haalPrijzenOp(){
 
     const data = await response.json();
 
-    // Extract text
+    // Extract text from all blocks (web_search may add tool_use/tool_result blocks)
     let tekst = '';
     if(data.content){
       for(const block of data.content){
         if(block.type === 'text') tekst += block.text;
+        // Also check nested content in tool results
+        if(block.type === 'tool_result' && Array.isArray(block.content)){
+          for(const sub of block.content){
+            if(sub.type === 'text') tekst += sub.text;
+          }
+        }
       }
     }
     tekst = tekst.trim();
+    if(!tekst) throw new Error('Geen tekst ontvangen van API');
 
-    // Extract JSON - handle possible markdown code blocks
-    let jsonStr = tekst;
-    const codeMatch = tekst.match(/```(?:json)?\s*([\s\S]*?)```/);
-    if(codeMatch) jsonStr = codeMatch[1].trim();
-    const objMatch = jsonStr.match(/\{[\s\S]*?\}/);
-    if(objMatch) jsonStr = objMatch[0];
+    // Extract JSON - try multiple patterns
+    let jsonStr = null;
+    // 1. Code block
+    const codeMatch = tekst.match(/```(?:json)?\s*(\{[\s\S]*?\})\s*```/);
+    if(codeMatch) jsonStr = codeMatch[1];
+    // 2. Raw JSON object
+    if(!jsonStr){ const objMatch = tekst.match(/\{[^{}]*"nl"[^{}]*"de"[^{}]*"be"[^{}]*\}/); if(objMatch) jsonStr = objMatch[0]; }
+    if(!jsonStr){ const objMatch = tekst.match(/\{[^{}]*\}/); if(objMatch) jsonStr = objMatch[0]; }
+    if(!jsonStr) throw new Error('Geen JSON gevonden in antwoord');
 
-    // Replace comma decimals with dots just in case
-    jsonStr = jsonStr.replace(/:\s*(\d+),(\d+)/g, ': $1.$2');
+    // Normalize: comma decimals → dots
+    jsonStr = jsonStr.replace(/:\s*(\d+),(\d{1,3})/g, ': $1.$2');
 
     let prijzen;
     try { prijzen = JSON.parse(jsonStr); }
-    catch(e) { throw new Error('Kon prijzen niet verwerken. Probeer opnieuw.'); }
+    catch(e) { throw new Error('JSON-parse mislukt: ' + jsonStr.slice(0,60)); }
 
     // Validate and save
     const landen = ['nl','de','be'];
