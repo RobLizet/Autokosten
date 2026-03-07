@@ -1,9 +1,9 @@
-const CACHE = 'autokosten-v1';
+const CACHE = 'autokosten-v2';
 const ASSETS = [
-  '/AutoKosten/',
-  '/AutoKosten/index.html',
-  '/AutoKosten/manifest.json',
-  '/AutoKosten/sw.js'
+  '/Autokosten/',
+  '/Autokosten/index.html',
+  '/Autokosten/manifest.json',
+  '/Autokosten/sw.js'
 ];
 self.addEventListener('install', e => {
   e.waitUntil(caches.open(CACHE).then(c => c.addAll(ASSETS)));
@@ -11,5 +11,5 @@ self.addEventListener('install', e => {
 });
 self.addEventListener('activate', e => e.waitUntil(self.clients.claim()));
 self.addEventListener('fetch', e => e.respondWith(
-  caches.match(e.request).then(r => r || fetch(e.request).catch(() => caches.match('/AutoKosten/index.html')))
+  caches.match(e.request).then(r => r || fetch(e.request).catch(() => caches.match('/Autokosten/index.html')))
 ));
