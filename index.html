@@ -1042,6 +1042,13 @@ async function haalPrijzenOp(){
 }
 
 // ─── INIT ────────────────────────────────────────────────────────────────────
+function fabKlik(){
+  if(currentTab==='tanken'){ openModal('addTank',{}); return; }
+  if(currentTab==='kosten'){ openModal('addKost',{}); return; }
+  nav('tanken');
+  setTimeout(()=>openModal('addTank',{}), 60);
+}
+
 if('serviceWorker' in navigator){
   navigator.serviceWorker.register('./sw.js').catch(()=>{});
 }
