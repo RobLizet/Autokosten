@@ -207,9 +207,11 @@ function berekenVoordeel(liters, landId, prijsBetaald, ritKm){
 // ─── RENDER ──────────────────────────────────────────────────────────────────
 function render(){
   const app = document.getElementById('app');
-  if(modal){renderModal(); return;}
   const pages = {dashboard:renderDashboard, tanken:renderTanken, apk:renderAPK, kosten:renderKosten, instellingen:renderInstellingen};
   app.innerHTML = (pages[currentTab]||renderDashboard)();
+  // Remove any stale modal
+  const existing = document.getElementById('modal-overlay');
+  if(existing) existing.remove();
 }
 
 // ─── DASHBOARD ───────────────────────────────────────────────────────────────
@@ -633,28 +635,35 @@ function renderInstellingen(){
 // ─── MODALS ──────────────────────────────────────────────────────────────────
 function openModal(type, data){
   modal = {type, data};
-  renderModal();
+  // Always render page behind first
+  const app = document.getElementById('app');
+  const pages = {dashboard:renderDashboard, tanken:renderTanken, apk:renderAPK, kosten:renderKosten, instellingen:renderInstellingen};
+  app.innerHTML = (pages[currentTab]||renderDashboard)();
+  // Now add overlay on top
+  let ov = document.getElementById('modal-overlay');
+  if(!ov){
+    ov = document.createElement('div');
+    ov.id = 'modal-overlay';
+    document.body.appendChild(ov);
+  }
+  ov.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:200;display:flex;align-items:flex-end;animation:fadeIn .15s';
+  ov.onclick = e=>{ if(e.target===ov) closeModal(); };
+  ov.innerHTML = '<div class="modal" onclick="event.stopPropagation()">' + getModalContent() + '</div>';
 }
+
 function closeModal(){
   modal = null;
+  const ov = document.getElementById('modal-overlay');
+  if(ov) ov.remove();
   render();
 }
 
 function renderModal(){
-  const app = document.getElementById('app');
-  // Keep page behind
-  if(!document.getElementById('modal-overlay')){
-    const ov = document.createElement('div');
-    ov.id = 'modal-overlay';
-    ov.className = 'modal-overlay';
-    ov.onclick = e=>{ if(e.target===ov) closeModal(); };
-    document.body.appendChild(ov);
-  }
-  const ov = document.getElementById('modal-overlay');
-  ov.innerHTML = `<div class="modal">${getModalContent()}</div>`;
+  openModal(modal.type, modal.data);
 }
 
 function removeModal(){
+  modal = null;
   const ov = document.getElementById('modal-overlay');
   if(ov) ov.remove();
 }
