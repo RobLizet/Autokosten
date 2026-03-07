@@ -128,6 +128,7 @@ label.lbl{font-size:12px;color:var(--txt3);font-weight:500}
   <button class="nav-btn" onclick="nav('kosten')" id="nb-kosten"><span class="nav-icon">💶</span>Kosten</button>
   <button class="nav-btn" onclick="nav('instellingen')" id="nb-instellingen"><span class="nav-icon">⚙️</span>Instellingen</button>
 </nav>
+<button id="fab" onclick="fabKlik()" style="position:fixed;right:18px;bottom:calc(70px + env(safe-area-inset-bottom,0px) + 12px);width:52px;height:52px;border-radius:50%;background:linear-gradient(135deg,#2563eb,#1d4ed8);border:none;color:white;font-size:26px;line-height:1;cursor:pointer;box-shadow:0 4px 18px rgba(37,99,235,.5);z-index:90;display:flex;align-items:center;justify-content:center;transition:transform .15s" ontouchstart="this.style.transform='scale(.92)'" ontouchend="this.style.transform='scale(1)'">+</button>
 
 <script>
 // ─── DATA ───────────────────────────────────────────────────────────────────
@@ -321,9 +322,11 @@ function renderTanken(){
   const tankbeurten = [...state.tankbeurten].sort((a,b)=>b.datum.localeCompare(a.datum));
 
   let html = `<div class="page">
-  <div class="page-header" style="display:flex;justify-content:space-between;align-items:flex-start">
-    <div><div class="page-title">⛽ Tankbeurten</div><div class="page-sub">${tankbeurten.length} registraties</div></div>
-    <button class="btn btn-primary btn-sm" onclick="openModal('addTank',{})">+ Toevoegen</button>
+  <div class="page-header">
+    <div style="display:flex;justify-content:space-between;align-items:center">
+      <div><div class="page-title">⛽ Tankbeurten</div><div class="page-sub">${tankbeurten.length} registraties</div></div>
+      <button class="btn btn-primary btn-sm" onclick="openModal('addTank',{})" style="flex-shrink:0;margin-left:10px">+ Toevoegen</button>
+    </div>
   </div>
   <div style="padding:0 14px">`;
 
@@ -483,9 +486,11 @@ function renderKosten(){
   kosten.forEach(k=>{ perCat[k.categorie]=(perCat[k.categorie]||0)+k.bedrag; });
 
   let html = `<div class="page">
-  <div class="page-header" style="display:flex;justify-content:space-between;align-items:flex-start">
-    <div><div class="page-title">💶 Kosten</div><div class="page-sub">${fmt(totaal)} totaal · ${kosten.length} posten</div></div>
-    <button class="btn btn-primary btn-sm" onclick="openModal('addKost',{})">+ Toevoegen</button>
+  <div class="page-header">
+    <div style="display:flex;justify-content:space-between;align-items:center">
+      <div><div class="page-title">💶 Kosten</div><div class="page-sub">${fmt(totaal)} totaal · ${kosten.length} posten</div></div>
+      <button class="btn btn-primary btn-sm" onclick="openModal('addKost',{})" style="flex-shrink:0;margin-left:10px">+ Toevoegen</button>
+    </div>
   </div>
   <div style="padding:0 14px">`;
 
