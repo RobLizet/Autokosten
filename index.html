@@ -939,16 +939,16 @@ function toggleKeyVisible(){
 
 async function haalPrijzenOp(){
   const apiKey = localStorage.getItem('anthropic_api_key')||'';
+  const btn = document.getElementById('fetch-btn');
+  const status = document.getElementById('fetch-status');
+
   if(!apiKey){
-    const status = document.getElementById('fetch-status');
-    if(status){ status.textContent = '⚠️ Voer eerst een API-sleutel in en sla op.'; status.style.color='#f87171'; }
+    if(status){ status.textContent = '⚠️ Voer eerst een API-sleutel in en klik Opslaan.'; status.style.color='#f87171'; }
     return;
   }
 
-  const btn = document.getElementById('fetch-btn');
-  const status = document.getElementById('fetch-status');
   if(btn){ btn.disabled=true; btn.textContent='⏳ Ophalen...'; }
-  if(status){ status.textContent = 'Actuele prijzen worden opgehaald via internet...'; status.style.color='var(--txt3)'; }
+  if(status){ status.textContent = 'Even geduld...'; status.style.color='var(--txt3)'; }
 
   try {
     const response = await fetch('https://api.anthropic.com/v1/messages', {
@@ -956,54 +956,59 @@ async function haalPrijzenOp(){
       headers: {
         'Content-Type': 'application/json',
         'x-api-key': apiKey,
-        'anthropic-version': '2023-06-01',
-        'anthropic-beta': 'web-search-2025-03-05'
+        'anthropic-version': '2023-06-01'
       },
       body: JSON.stringify({
-        model: 'claude-sonnet-4-5-20251001',
-        max_tokens: 400,
-        tools: [{ type: 'web_search_20250305', name: 'web_search' }],
-        system: 'Je bent een assistent die uitsluitend JSON teruggeeft. Geen uitleg, geen markdown, alleen raw JSON.',
+        model: 'claude-haiku-4-5-20251001',
+        max_tokens: 200,
+        system: 'Geef uitsluitend een JSON-object terug. Geen uitleg, geen markdown, geen code blocks. Alleen de raw JSON.',
         messages: [{
           role: 'user',
-          content: `Zoek de huidige gemiddelde Euro95 benzineprijzen per liter vandaag (${today()}) voor Nederland, Duitsland en België. 
-Geef ALLEEN dit JSON terug (geen uitleg, geen markdown):
-{"nl": 2.286, "de": 1.95, "be": 1.85}
-Vervang de getallen met de actuele prijzen die je vindt. Maximaal 3 decimalen.`
+          content: 'Wat zijn de huidige gemiddelde Euro95 benzineprijzen per liter (in euro) in Nederland, Duitsland en Belgie? Geef alleen JSON: {"nl": 2.29, "de": 1.95, "be": 1.85} met de meest recente prijzen die je kent. Gebruik een punt als decimaalscheiding.'
         }]
       })
     });
 
     if(!response.ok){
       const err = await response.json().catch(()=>({}));
-      throw new Error(err?.error?.message || `HTTP ${response.status}`);
+      throw new Error(err?.error?.message || 'HTTP ' + response.status);
     }
 
     const data = await response.json();
 
-    // Extract text from content blocks (may include tool_use blocks)
+    // Extract text
     let tekst = '';
     if(data.content){
       for(const block of data.content){
         if(block.type === 'text') tekst += block.text;
       }
     }
+    tekst = tekst.trim();
 
-    // Parse JSON from response
-    const match = tekst.match(/\{[^}]+\}/);
-    if(!match) throw new Error('Geen geldige prijzen ontvangen');
-    const prijzen = JSON.parse(match[0]);
+    // Extract JSON - handle possible markdown code blocks
+    let jsonStr = tekst;
+    const codeMatch = tekst.match(/```(?:json)?\s*([\s\S]*?)```/);
+    if(codeMatch) jsonStr = codeMatch[1].trim();
+    const objMatch = jsonStr.match(/\{[\s\S]*?\}/);
+    if(objMatch) jsonStr = objMatch[0];
 
-    // Validate
+    // Replace comma decimals with dots just in case
+    jsonStr = jsonStr.replace(/:\s*(\d+),(\d+)/g, ': $1.$2');
+
+    let prijzen;
+    try { prijzen = JSON.parse(jsonStr); }
+    catch(e) { throw new Error('Kon prijzen niet verwerken. Probeer opnieuw.'); }
+
+    // Validate and save
     const landen = ['nl','de','be'];
     for(const l of landen){
       const p = parseFloat(prijzen[l]);
-      if(isNaN(p) || p < 0.5 || p > 5) throw new Error(`Ongeldige prijs voor ${l}: ${prijzen[l]}`);
+      if(isNaN(p) || p < 0.8 || p > 5) throw new Error('Onverwachte prijs voor ' + l + ': ' + prijzen[l]);
       state.prijzen[l] = Math.round(p * 1000) / 1000;
     }
     save();
 
-    // Update input fields live
+    // Update velden live
     landen.forEach(l => {
       const inp = document.getElementById('prijs-'+l);
       if(inp) inp.value = fmtN(state.prijzen[l], 3).replace(',','.');
@@ -1013,14 +1018,16 @@ Vervang de getallen met de actuele prijzen die je vindt. Maximaal 3 decimalen.`
     localStorage.setItem('prijzen_last_fetch', now);
 
     if(status){
-      status.innerHTML = `✅ Prijzen bijgewerkt op ${now}<br>
-        🇳🇱 €${fmtN(state.prijzen.nl,3)} &nbsp; 🇩🇪 €${fmtN(state.prijzen.de,3)} &nbsp; 🇧🇪 €${fmtN(state.prijzen.be,3)}`;
+      status.innerHTML = '✅ Bijgewerkt op ' + now + '<br>' +
+        '🇳🇱 €' + fmtN(state.prijzen.nl,3) + ' &nbsp; ' +
+        '🇩🇪 €' + fmtN(state.prijzen.de,3) + ' &nbsp; ' +
+        '🇧🇪 €' + fmtN(state.prijzen.be,3);
       status.style.color = '#34d399';
     }
 
   } catch(e) {
     if(status){
-      status.textContent = '❌ Fout: ' + e.message;
+      status.textContent = '❌ ' + e.message;
       status.style.color = '#f87171';
     }
   } finally {
