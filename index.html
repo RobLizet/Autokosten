@@ -744,14 +744,32 @@ function renderInstellingen(){
     </div>`;
   });
 
-  html += `<div class="section-title" style="margin-top:6px">Data</div>
+  // Backup stats
+  const nTank = state.tankbeurten.length;
+  const nKost = state.kosten.length;
+  const nRit  = state.ritten.length;
+  const nApk  = Object.values(state.apk||{}).filter(v=>v).length;
+  const lastBackup = localStorage.getItem('last_backup');
+
+  html += `<div class="section-title" style="margin-top:6px">Backup & Herstel</div>
   <div class="card" style="margin-bottom:14px">
-    <button class="btn btn-secondary btn-full" style="margin-bottom:8px" onclick="exportData()">📤 Exporteer data (JSON)</button>
+    <div style="font-size:12px;color:var(--txt3);margin-bottom:12px;line-height:1.6">
+      💾 <strong style="color:var(--txt)">${nTank}</strong> tankbeurten &nbsp;·&nbsp;
+      🛣️ <strong style="color:var(--txt)">${nRit}</strong> ritten &nbsp;·&nbsp;
+      💶 <strong style="color:var(--txt)">${nKost}</strong> kosten &nbsp;·&nbsp;
+      ✅ <strong style="color:var(--txt)">${nApk}</strong> APK-data
+      ${lastBackup ? `<br>📅 Laatste backup: <span style="color:#34d399">${lastBackup}</span>` : '<br><span style="color:#f59e0b">⚠️ Nog geen backup gemaakt</span>'}
+    </div>
+    <button class="btn btn-primary btn-full" style="margin-bottom:8px" onclick="maakBackup()">💾 Backup downloaden</button>
+    <label class="btn btn-secondary btn-full" style="display:flex;align-items:center;justify-content:center;gap:8px;cursor:pointer;margin-bottom:8px">
+      📂 Backup terugzetten
+      <input type="file" accept=".json" onchange="herstelBackup(event)" style="display:none">
+    </label>
     <button class="btn btn-danger btn-full" onclick="resetData()">🗑️ Alles wissen</button>
   </div>
 
   <div style="text-align:center;padding:20px 0;color:var(--txt3);font-size:11px">AutoKosten Rob v1.1 · PWA</div>
-  </div></div>`;
+  </div></div>\`;
   return html;
 }
 
@@ -1107,12 +1125,50 @@ function updateKostenPerKm(val){
   if(!isNaN(n)&&n>=0){ state.kostenPerKm=n; save(); }
 }
 
-function exportData(){
-  const blob = new Blob([JSON.stringify(state,null,2)],{type:'application/json'});
-  const a = document.createElement('a');
-  a.href = URL.createObjectURL(blob);
-  a.download = `autokosten-export-${today()}.json`;
-  a.click();
+function maakBackup(){
+  const datum = new Date().toISOString().slice(0,10);
+  const tijd  = new Date().toLocaleTimeString('nl-NL',{hour:'2-digit',minute:'2-digit'}).replace(':','-');
+  const bestandsnaam = `AutoKosten-backup-${datum}-${tijd}.json`;
+  const data = {
+    versie: '1.1',
+    datum: new Date().toISOString(),
+    data: state
+  };
+  const blob = new Blob([JSON.stringify(data, null, 2)], {type:'application/json'});
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement('a');
+  a.href = url; a.download = bestandsnaam; a.click();
+  URL.revokeObjectURL(url);
+  const now = new Date().toLocaleString('nl-NL');
+  localStorage.setItem('last_backup', now);
+  render();
+}
+
+function herstelBackup(event){
+  const file = event.target.files[0];
+  if(!file) return;
+  const reader = new FileReader();
+  reader.onload = e => {
+    try {
+      const parsed = JSON.parse(e.target.result);
+      // Ondersteuning voor beide formaten: direct state of genest onder 'data'
+      const herstelData = parsed.data || parsed;
+      if(!herstelData.tankbeurten && !herstelData.ritten && !herstelData.kosten){
+        alert('❌ Ongeldig backup-bestand. Kies een AutoKosten backup JSON.');
+        return;
+      }
+      if(!confirm(`Backup terugzetten van ${parsed.datum ? new Date(parsed.datum).toLocaleString('nl-NL') : 'onbekende datum'}?\n\nHuidige data wordt overschreven.`)) return;
+      // Merge met defaults zodat nieuwe velden niet ontbreken
+      state = Object.assign({}, defaultData, herstelData);
+      if(!state.ritten) state.ritten = [];
+      save();
+      render();
+      setTimeout(()=>alert('✅ Backup succesvol teruggezet!'), 100);
+    } catch(err){
+      alert('❌ Fout bij inlezen: ' + err.message);
+    }
+  };
+  reader.readAsText(file);
 }
 
 function resetData(){
