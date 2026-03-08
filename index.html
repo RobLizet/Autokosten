@@ -125,6 +125,7 @@ label.lbl{font-size:12px;color:var(--txt3);font-weight:500}
   <button class="nav-btn active" onclick="nav('dashboard')" id="nb-dashboard"><span class="nav-icon">📊</span>Dashboard</button>
   <button class="nav-btn" onclick="nav('tanken')" id="nb-tanken"><span class="nav-icon">⛽</span>Tanken</button>
   <button class="nav-btn" onclick="nav('apk')" id="nb-apk"><span class="nav-icon">✅</span>APK</button>
+  <button class="nav-btn" onclick="nav('ritten')" id="nb-ritten"><span class="nav-icon">🛣️</span>Ritten</button>
   <button class="nav-btn" onclick="nav('kosten')" id="nb-kosten"><span class="nav-icon">💶</span>Kosten</button>
   <button class="nav-btn" onclick="nav('instellingen')" id="nb-instellingen"><span class="nav-icon">⚙️</span>Instellingen</button>
 </nav>
@@ -159,9 +160,11 @@ const defaultData = {
   apk: {peugeot:'', ford:''},
   tankbeurten:[],
   kosten:[],
+  ritten:[],
 };
 
 let state = JSON.parse(localStorage.getItem('autokosten') || 'null') || defaultData;
+if(!state.ritten) state.ritten = [];
 let currentTab = 'dashboard';
 let modal = null; // {type, data}
 
@@ -207,7 +210,7 @@ function berekenVoordeel(liters, landId, prijsBetaald, ritKm){
 // ─── RENDER ──────────────────────────────────────────────────────────────────
 function render(){
   const app = document.getElementById('app');
-  const pages = {dashboard:renderDashboard, tanken:renderTanken, apk:renderAPK, kosten:renderKosten, instellingen:renderInstellingen};
+  const pages = {dashboard:renderDashboard, tanken:renderTanken, ritten:renderRitten, apk:renderAPK, kosten:renderKosten, instellingen:renderInstellingen};
   app.innerHTML = (pages[currentTab]||renderDashboard)();
   // Remove any stale modal
   const existing = document.getElementById('modal-overlay');
@@ -413,6 +416,124 @@ function renderTanken(){
         <button class="btn btn-secondary btn-sm btn-full" onclick="openModal('editTank',${JSON.stringify({id:t.id})})">✏️ Bewerken</button>
         <button class="btn btn-danger btn-sm" onclick="verwijderTank('${t.id}')">🗑️</button>
       </div></div>`;
+    });
+  }
+
+  html += `</div></div>`;
+  return html;
+}
+
+
+// ─── RITTEN ──────────────────────────────────────────────────────────────────
+function renderRitten(){
+  const filterVt = state.rittenFilter || 'alle';
+  const alleRitten = [...state.ritten].sort((a,b)=>b.datum.localeCompare(a.datum));
+  const ritten = filterVt==='alle' ? alleRitten : alleRitten.filter(r=>r.voertuig===filterVt);
+  const totKm = ritten.reduce((s,r)=>s+r.km,0);
+  const totKosten = ritten.reduce((s,r)=>s+r.km*state.kostenPerKm,0);
+
+  const DOELEN = ['Werk','Privé','Familie','Medisch','Vakantie','Boodschappen','Overig'];
+
+  let html = `<div class="page">
+  <div class="page-header">
+    <div style="display:flex;justify-content:space-between;align-items:center">
+      <div><div class="page-title">🛣️ Ritten</div><div class="page-sub">${alleRitten.length} ritten · ${fmtN(alleRitten.reduce((s,r)=>s+r.km,0),0)} km totaal</div></div>
+      <button class="btn btn-primary btn-sm" onclick="openModal('addRit',{})" style="flex-shrink:0;margin-left:10px">+ Toevoegen</button>
+    </div>
+  </div>
+  <div style="padding:0 14px">`;
+
+  // Per-auto filter knoppen
+  html += `<div class="grid2" style="margin-bottom:12px">`;
+  VOERTUIGEN.forEach(v=>{
+    const vRitten = alleRitten.filter(r=>r.voertuig===v.id);
+    const vKm = vRitten.reduce((s,r)=>s+r.km,0);
+    const isAct = filterVt===v.id;
+    html += `<div class="card" style="border-left:3px solid ${v.kleur};cursor:pointer;opacity:${filterVt!=='alle'&&!isAct?0.45:1}" onclick="setRitFilter('${v.id}')">
+      <div style="font-size:11px;color:var(--txt3)">${v.naam}</div>
+      <div style="font-size:18px;font-weight:700;color:${v.kleur};margin-top:2px">${fmtN(vKm,0)} km</div>
+      <div style="font-size:11px;color:var(--txt3)">${vRitten.length} ritten</div>
+      ${isAct?`<div style="font-size:10px;color:${v.kleur};margin-top:4px">✓ Gefilterd</div>`:''}
+    </div>`;
+  });
+  html += `</div>`;
+
+  // Totaal stats
+  html += `<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:14px">
+    <div class="card-sm" style="border-left:3px solid #3b82f6;text-align:center">
+      <div style="font-size:11px;color:var(--txt3)">Ritten</div>
+      <div style="font-size:20px;font-weight:700;color:#3b82f6;margin-top:2px">${ritten.length}</div>
+    </div>
+    <div class="card-sm" style="border-left:3px solid #10b981;text-align:center">
+      <div style="font-size:11px;color:var(--txt3)">Totaal km</div>
+      <div style="font-size:20px;font-weight:700;color:#10b981;margin-top:2px">${fmtN(totKm,0)}</div>
+    </div>
+    <div class="card-sm" style="border-left:3px solid #f97316;text-align:center">
+      <div style="font-size:11px;color:var(--txt3)">Kosten</div>
+      <div style="font-size:18px;font-weight:700;color:#f97316;margin-top:2px">${fmt(totKosten)}</div>
+    </div>
+  </div>`;
+
+  // Per doel samenvatting
+  if(ritten.length > 0){
+    const perDoel = {};
+    ritten.forEach(r=>{ perDoel[r.doel]=(perDoel[r.doel]||0)+r.km; });
+    const totD = Object.values(perDoel).reduce((s,v)=>s+v,0);
+    html += `<div class="section-title">Verdeling per doel</div>
+    <div class="card" style="padding:10px 14px;margin-bottom:14px">`;
+    Object.entries(perDoel).sort((a,b)=>b[1]-a[1]).forEach(([doel,km])=>{
+      const pct = totD>0?Math.round(km/totD*100):0;
+      const kleuren = {Werk:'#3b82f6',Privé:'#10b981',Familie:'#8b5cf6',Medisch:'#ef4444',Vakantie:'#f59e0b',Boodschappen:'#06b6d4',Overig:'#6b7280'};
+      const kl = kleuren[doel]||'#6b7280';
+      html += `<div style="display:flex;align-items:center;gap:10px;padding:7px 0;border-bottom:1px solid var(--border)">
+        <div style="width:8px;height:8px;border-radius:50%;background:${kl};flex-shrink:0"></div>
+        <div style="flex:1">
+          <div style="display:flex;justify-content:space-between;font-size:13px;margin-bottom:3px">
+            <span style="color:var(--txt)">${doel}</span>
+            <span style="font-weight:600">${fmtN(km,0)} km</span>
+          </div>
+          <div style="height:3px;background:var(--border);border-radius:2px">
+            <div style="height:100%;width:${pct}%;background:${kl};border-radius:2px"></div>
+          </div>
+        </div>
+        <span style="font-size:11px;color:var(--txt3);width:28px;text-align:right">${pct}%</span>
+      </div>`;
+    });
+    html += `</div>`;
+  }
+
+  // Lijst
+  if(ritten.length === 0){
+    html += `<div class="empty"><div class="empty-icon">🛣️</div><div>Nog geen ritten geregistreerd</div><div style="font-size:12px;margin-top:6px">Tik + om een rit toe te voegen</div></div>`;
+  } else {
+    html += `<div class="section-title">Alle ritten</div>`;
+    ritten.forEach(r=>{
+      const kleuren = {Werk:'#3b82f6',Privé:'#10b981',Familie:'#8b5cf6',Medisch:'#ef4444',Vakantie:'#f59e0b',Boodschappen:'#06b6d4',Overig:'#6b7280'};
+      const kl = kleuren[r.doel]||'#6b7280';
+      const ritKosten = r.km * state.kostenPerKm;
+      const vt2 = getVt(r.voertuig||'peugeot');
+      html += `<div class="card" style="margin-bottom:8px;border-left:3px solid ${kl}">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:6px">
+          <div>
+            <div style="font-size:14px;font-weight:600;color:var(--txt)">${r.van} → ${r.naar}</div>
+            <div style="font-size:11px;color:var(--txt3);margin-top:2px">${r.datum} · <span style="color:${vt2?.kleur}">${vt2?.naam}</span></div>
+          </div>
+          <div style="text-align:right;flex-shrink:0;margin-left:10px">
+            <div style="font-size:16px;font-weight:700;color:#10b981">${fmtN(r.km,0)} km</div>
+            <div style="font-size:11px;color:var(--txt3)">${fmt(ritKosten)}</div>
+          </div>
+        </div>
+        <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
+          <span style="font-size:11px;background:${kl}22;color:${kl};padding:2px 8px;border-radius:10px">${r.doel}</span>
+          ${r.kmStand?`<span class="badge badge-blue">📍 ${r.kmStand.toLocaleString('nl-NL')} km</span>`:''}
+          ${r.retoer?`<span style="font-size:11px;background:#334155;color:#94a3b8;padding:2px 8px;border-radius:10px">↩️ Retoer</span>`:''}
+        </div>
+        ${r.notities?`<div style="font-size:12px;color:var(--txt3);margin-top:6px;font-style:italic">"${r.notities}"</div>`:''}
+        <div style="display:flex;gap:8px;margin-top:10px">
+          <button class="btn btn-secondary btn-sm btn-full" onclick="openModal('editRit',${JSON.stringify({id:r.id})})">✏️ Bewerken</button>
+          <button class="btn btn-danger btn-sm" onclick="verwijderRit('${r.id}')">🗑️</button>
+        </div>
+      </div>`;
     });
   }
 
@@ -637,7 +758,7 @@ function openModal(type, data){
   modal = {type, data};
   // Always render page behind first
   const app = document.getElementById('app');
-  const pages = {dashboard:renderDashboard, tanken:renderTanken, apk:renderAPK, kosten:renderKosten, instellingen:renderInstellingen};
+  const pages = {dashboard:renderDashboard, tanken:renderTanken, ritten:renderRitten, apk:renderAPK, kosten:renderKosten, instellingen:renderInstellingen};
   app.innerHTML = (pages[currentTab]||renderDashboard)();
   // Now add overlay on top
   let ov = document.getElementById('modal-overlay');
@@ -768,6 +889,74 @@ function getModalContent(){
 
     <button class="btn btn-primary btn-full" onclick="slaaKostOp(${isEdit?`'${k.id}'`:'null'})" style="margin-bottom:10px">
       ${isEdit?'✓ Opslaan':'💶 Kost opslaan'}
+    </button>
+    <button class="btn btn-secondary btn-full" onclick="closeModal()">Annuleren</button>`;
+  }
+
+
+  if(type==='addRit'||type==='editRit'){
+    const isEdit = type==='editRit';
+    const r = isEdit ? state.ritten.find(x=>x.id===data.id) : {datum:today(),van:'',naar:'',km:'',doel:'Privé',kmStand:'',retoer:false,notities:''};
+    if(!r){closeModal();return '';}
+    const DOELEN = ['Werk','Privé','Familie','Medisch','Vakantie','Boodschappen','Overig'];
+    return `<div class="modal-handle"></div>
+    <div class="modal-title">${isEdit?'✏️ Rit bewerken':'🛣️ Rit toevoegen'}</div>
+
+    <div class="grid2">
+      <div class="form-group">
+        <label class="lbl">Auto</label>
+        <select class="inp" id="r-voertuig">
+          ${VOERTUIGEN.map(v=>`<option value="${v.id}"${(r.voertuig||'peugeot')===v.id?' selected':''}>${v.naam}</option>`).join('')}
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="lbl">Datum</label>
+        <input class="inp" type="date" id="r-datum" value="${r.datum}">
+      </div>
+    </div>
+
+    <div class="grid2">
+      <div class="form-group">
+        <label class="lbl">Van</label>
+        <input class="inp" type="text" id="r-van" value="${r.van||''}" placeholder="bijv. Leende" oninput="debounceAfstand()">
+      </div>
+      <div class="form-group">
+        <label class="lbl">Naar</label>
+        <input class="inp" type="text" id="r-naar" value="${r.naar||''}" placeholder="bijv. Eindhoven" oninput="debounceAfstand()">
+      </div>
+    </div>
+    <div id="afstand-status" style="font-size:12px;color:var(--txt3);margin:-6px 0 10px 0;min-height:16px"></div>
+
+    <div class="grid2">
+      <div class="form-group">
+        <label class="lbl">Kilometers <span id="km-auto-badge" style="display:none;font-size:10px;background:#10b981;color:white;padding:1px 6px;border-radius:8px;margin-left:4px">auto</span></label>
+        <input class="inp" type="number" min="0" step="1" id="r-km" value="${r.km||''}" placeholder="0" oninput="document.getElementById('km-auto-badge').style.display='none'">
+      </div>
+      <div class="form-group">
+        <label class="lbl">Doel</label>
+        <select class="inp" id="r-doel">
+          ${DOELEN.map(d=>`<option value="${d}"${r.doel===d?' selected':''}>${d}</option>`).join('')}
+        </select>
+      </div>
+    </div>
+
+    <div class="form-group">
+      <label class="lbl">Kilometerstand</label>
+      <input class="inp" type="number" min="0" id="r-kmstand" value="${r.kmStand||''}" placeholder="bijv. 185000">
+    </div>
+
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;padding:10px 14px;background:var(--bg);border:1px solid var(--border);border-radius:10px">
+      <input type="checkbox" id="r-retoer" ${r.retoer?'checked':''} style="width:18px;height:18px;accent-color:#3b82f6;cursor:pointer">
+      <label for="r-retoer" style="font-size:14px;color:var(--txt);cursor:pointer">↩️ Retoer (km wordt verdubbeld)</label>
+    </div>
+
+    <div class="form-group">
+      <label class="lbl">Notities</label>
+      <input class="inp" type="text" id="r-notities" value="${r.notities||''}" placeholder="Optioneel...">
+    </div>
+
+    <button class="btn btn-primary btn-full" onclick="slaaRitOp(${isEdit?`'${r.id}'`:'null'})" style="margin-bottom:10px">
+      ${isEdit?'✓ Wijzigingen opslaan':'🛣️ Rit opslaan'}
     </button>
     <button class="btn btn-secondary btn-full" onclick="closeModal()">Annuleren</button>`;
   }
@@ -1052,9 +1241,108 @@ async function haalPrijzenOp(){
 
 
 // ─── INIT ────────────────────────────────────────────────────────────────────
+
+
+let _afstandTimer = null;
+function debounceAfstand(){
+  clearTimeout(_afstandTimer);
+  _afstandTimer = setTimeout(()=>{
+    const van = (document.getElementById('r-van')?.value||'').trim();
+    const naar = (document.getElementById('r-naar')?.value||'').trim();
+    if(van.length >= 2 && naar.length >= 2) autoAfstand();
+  }, 900);
+}
+
+async function autoAfstand(){
+  const van = (document.getElementById('r-van')?.value||'').trim();
+  const naar = (document.getElementById('r-naar')?.value||'').trim();
+  const status = document.getElementById('afstand-status');
+  const badge = document.getElementById('km-auto-badge');
+  if(!van || !naar) return;
+
+  if(status) { status.textContent = '📍 Afstand berekenen...'; status.style.color='var(--txt3)'; }
+
+  try {
+    // Geocode Van
+    const geoVan = await fetch(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(van+', Nederland')}&format=json&limit=1`, {headers:{'User-Agent':'AutoKostenApp/1.0'}});
+    const vanData = await geoVan.json();
+    if(!vanData.length) throw new Error('Locatie "'+van+'" niet gevonden');
+
+    // Geocode Naar
+    const geoNaar = await fetch(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(naar+', Nederland')}&format=json&limit=1`, {headers:{'User-Agent':'AutoKostenApp/1.0'}});
+    const naarData = await geoNaar.json();
+    if(!naarData.length) throw new Error('Locatie "'+naar+'" niet gevonden');
+
+    const vanCoord = `${vanData[0].lon},${vanData[0].lat}`;
+    const naarCoord = `${naarData[0].lon},${naarData[0].lat}`;
+
+    // Route via OSRM
+    const route = await fetch(`https://router.project-osrm.org/route/v1/driving/${vanCoord};${naarCoord}?overview=false`);
+    const routeData = await route.json();
+    if(routeData.code !== 'Ok') throw new Error('Route niet gevonden');
+
+    const km = Math.round(routeData.routes[0].distance / 1000);
+    const minuten = Math.round(routeData.routes[0].duration / 60);
+    const uur = Math.floor(minuten/60);
+    const min = minuten % 60;
+    const tijdStr = uur > 0 ? `${uur}u ${min}m` : `${min} min`;
+
+    const inp = document.getElementById('r-km');
+    if(inp){ inp.value = km; }
+    if(badge){ badge.style.display='inline'; }
+    if(status){ 
+      status.innerHTML = `✅ ${km} km · ⏱️ ${tijdStr} · <span style="color:#94a3b8">${vanData[0].display_name.split(',')[0]} → ${naarData[0].display_name.split(',')[0]}</span>`;
+      status.style.color='#34d399';
+    }
+  } catch(e){
+    if(status){ status.textContent = '⚠️ '+e.message+' — vul km handmatig in'; status.style.color='#f59e0b'; }
+  }
+}
+
+function slaaRitOp(editId){
+  let km = parseFloat(document.getElementById('r-km').value);
+  const van = document.getElementById('r-van').value.trim();
+  const naar = document.getElementById('r-naar').value.trim();
+  if(!km||isNaN(km)||km<=0||!van||!naar) return;
+  const retoer = document.getElementById('r-retoer').checked;
+  if(retoer) km = km * 2;
+  const obj = {
+    id: editId||Date.now().toString(),
+    datum: document.getElementById('r-datum').value,
+    voertuig: document.getElementById('r-voertuig').value,
+    van, naar, km,
+    doel: document.getElementById('r-doel').value,
+    kmStand: parseInt(document.getElementById('r-kmstand').value)||null,
+    retoer: document.getElementById('r-retoer').checked,
+    notities: document.getElementById('r-notities').value,
+  };
+  if(editId){
+    state.ritten = state.ritten.map(r=>r.id===editId?obj:r);
+  } else {
+    state.ritten.push(obj);
+  }
+  save();
+  removeModal();
+  modal = null;
+  nav('ritten');
+}
+
+function verwijderRit(id){
+  if(!confirm('Rit verwijderen?'))return;
+  state.ritten = state.ritten.filter(r=>r.id!==id);
+  save(); render();
+}
+
+function setRitFilter(id){
+  if(state.rittenFilter===id) state.rittenFilter='alle';
+  else state.rittenFilter=id;
+  render();
+}
+
 function fabKlik(){
   if(currentTab==='tanken'){ openModal('addTank',{}); return; }
   if(currentTab==='kosten'){ openModal('addKost',{}); return; }
+  if(currentTab==='ritten'){ openModal('addRit',{}); return; }
   nav('tanken');
   setTimeout(()=>openModal('addTank',{}), 60);
 }
