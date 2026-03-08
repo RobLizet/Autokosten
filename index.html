@@ -1203,74 +1203,109 @@ async function haalPrijzenOp(){
   const btn = document.getElementById('fetch-btn');
   const status = document.getElementById('fetch-status');
   if(btn){ btn.disabled=true; btn.textContent='⏳ Ophalen...'; }
-  if(status){ status.textContent='Prijzen ophalen...'; status.style.color='var(--txt3)'; }
+  if(status){ status.textContent='Actuele prijzen ophalen via internet...'; status.style.color='var(--txt3)'; }
 
   try {
     const apiKey = localStorage.getItem('anthropic_api_key') || '';
-    if(!apiKey) throw new Error('Voer eerst een API-sleutel in bij "Anthropic API-sleutel" hieronder.');
+    if(!apiKey) throw new Error('Voer eerst een API-sleutel in.');
 
-    // Gebruik Claude API met kennis van actuele prijzen
-    // Claude kent de GLA-adviesprijzen goed — vraag expliciet naar NL GLA prijs
-    const resp = await fetch('https://api.anthropic.com/v1/messages', {
-      method:'POST',
-      headers:{
-        'Content-Type':'application/json',
-        'x-api-key': apiKey,
-        'anthropic-version':'2023-06-01',
-        'anthropic-dangerous-direct-browser-access':'true'
-      },
-      body: JSON.stringify({
-        model:'claude-haiku-4-5-20251001',
-        max_tokens:80,
-        system:'Je geeft ALLEEN een JSON object terug, absoluut geen andere tekst, geen markdown, geen uitleg.',
-        messages:[{role:'user', content:'Wat zijn de huidige Euro95 benzine pompprijzen per liter in euro voor Nederland (ANWB/GLA adviesprijs rond €2,14), Duitsland (rond €2,00) en Belgie (rond €1,74)? Geef alleen: {"nl":2.14,"de":2.00,"be":1.74} met de meest nauwkeurige waarden die je kent. Gebruik een punt als decimaalscheiding.'}]
-      })
-    });
+    const headers = {
+      'Content-Type': 'application/json',
+      'x-api-key': apiKey,
+      'anthropic-version': '2023-06-01',
+      'anthropic-dangerous-direct-browser-access': 'true'
+    };
 
-    if(!resp.ok){
-      const err = await resp.json().catch(()=>({}));
-      throw new Error(err?.error?.message || 'API fout: HTTP ' + resp.status);
+    const tools = [{ type: 'web_search_20250305', name: 'web_search' }];
+    const system = 'Je bent een assistent die actuele brandstofprijzen opzoekt. Zoek altijd live via web search. Geef het eindantwoord ALLEEN als JSON object: {"nl":X.XXX,"de":X.XXX,"be":X.XXX} met punten als decimaalscheiding. Geen andere tekst.';
+    const userMsg = 'Zoek de actuele Euro95 benzine pompprijs per liter vandaag in: 1) Nederland (ANWB of UnitedConsumers GLA adviesprijs), 2) Duitsland (ADAC of Clever-Tanken), 3) Belgie (carbu.com of FEBIAC). Geef alleen JSON: {"nl":X.XXX,"de":X.XXX,"be":X.XXX}';
+
+    // Stap 1: eerste API call met web search tool
+    let messages = [{ role: 'user', content: userMsg }];
+    let ronde = 0;
+    let tekst = '';
+
+    while(ronde < 5){
+      ronde++;
+      if(status) status.textContent = 'Prijzen zoeken... (stap ' + ronde + ')';
+
+      const resp = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ model: 'claude-haiku-4-5-20251001', max_tokens: 1024, system, tools, messages })
+      });
+
+      if(!resp.ok){
+        const err = await resp.json().catch(()=>({}));
+        throw new Error(err?.error?.message || 'API fout HTTP ' + resp.status);
+      }
+
+      const data = await resp.json();
+      const content = data.content || [];
+
+      // Verzamel tekstblokken
+      tekst = content.filter(b => b.type === 'text').map(b => b.text).join('');
+
+      // Als model klaar is (stop_reason = end_turn of geen tool_use), stoppen
+      if(data.stop_reason === 'end_turn' || !content.some(b => b.type === 'tool_use')){
+        break;
+      }
+
+      // Tool use blokken verwerken: stuur tool results terug
+      const toolUseBlocks = content.filter(b => b.type === 'tool_use');
+      const toolResults = toolUseBlocks.map(b => ({
+        type: 'tool_result',
+        tool_use_id: b.id,
+        content: b.input ? JSON.stringify(b.input) : ''
+      }));
+
+      // Voeg assistent antwoord + tool results toe aan messages
+      messages = [
+        ...messages,
+        { role: 'assistant', content },
+        { role: 'user', content: toolResults }
+      ];
     }
 
-    const d = await resp.json();
-    const t = (d.content||[]).filter(b=>b.type==='text').map(b=>b.text).join('').trim();
-    const m = t.match(/\{[^}]+\}/);
-    if(!m) throw new Error('Geen geldige prijzen ontvangen. Probeer opnieuw.');
+    // Extraheer JSON uit eindtekst
+    const m = tekst.match(/\{[^}]*"nl"[^}]*"de"[^}]*"be"[^}]*\}/) ||
+              tekst.match(/\{[^}]+\}/);
+    if(!m) throw new Error('Geen prijzen gevonden. Probeer opnieuw of vul handmatig in.');
 
     const p = JSON.parse(m[0].replace(/([0-9]),([0-9])/g,'$1.$2'));
     const nl = parseFloat(p.nl), de = parseFloat(p.de), be = parseFloat(p.be);
 
-    // Strenge validatie: Euro95 is momenteel tussen €1,50 en €2,50
-    if([nl,de,be].some(v=>isNaN(v)||v<1.5||v>2.5)){
-      throw new Error('Onverwachte prijzen ('+[nl,de,be].join('/')+'). Pas handmatig aan.');
+    if([nl,de,be].some(v => isNaN(v) || v < 1.3 || v > 3.0)){
+      throw new Error('Onverwachte prijzen ontvangen (' + [nl,de,be].join('/') + '). Pas handmatig aan.');
     }
 
     state.prijzen = {
-      nl: Math.round(nl*1000)/1000,
-      de: Math.round(de*1000)/1000,
-      be: Math.round(be*1000)/1000
+      nl: Math.round(nl * 1000) / 1000,
+      de: Math.round(de * 1000) / 1000,
+      be: Math.round(be * 1000) / 1000
     };
     save();
 
-    ['nl','de','be'].forEach(l=>{
-      const inp = document.getElementById('prijs-'+l);
-      if(inp) inp.value = fmtN(state.prijzen[l],3).replace(',','.');
+    ['nl','de','be'].forEach(l => {
+      const inp = document.getElementById('prijs-' + l);
+      if(inp) inp.value = fmtN(state.prijzen[l], 3).replace(',', '.');
     });
 
     const now = new Date().toLocaleString('nl-NL');
     localStorage.setItem('prijzen_last_fetch', now);
     if(status){
-      status.innerHTML = '✅ Bijgewerkt op '+now+'<br>'+
-        '🇳🇱 €'+fmtN(state.prijzen.nl,3)+' &nbsp; 🇩🇪 €'+fmtN(state.prijzen.de,3)+' &nbsp; 🇧🇪 €'+fmtN(state.prijzen.be,3);
-      status.style.color='#34d399';
+      status.innerHTML = '✅ Bijgewerkt op ' + now + '<br>' +
+        '🇳🇱 €' + fmtN(state.prijzen.nl,3) + ' &nbsp; 🇩🇪 €' + fmtN(state.prijzen.de,3) + ' &nbsp; 🇧🇪 €' + fmtN(state.prijzen.be,3);
+      status.style.color = '#34d399';
     }
 
   } catch(e){
-    if(status){ status.textContent='❌ '+e.message; status.style.color='#f87171'; }
+    if(status){ status.textContent = '❌ ' + e.message; status.style.color = '#f87171'; }
   } finally {
     if(btn){ btn.disabled=false; btn.textContent='🔄 Haal actuele prijzen op'; }
   }
 }
+
 
 
 // ─── INIT ────────────────────────────────────────────────────────────────────
