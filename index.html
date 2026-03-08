@@ -136,8 +136,8 @@ label.lbl{font-size:12px;color:var(–txt3);font-weight:500}
 <script>
 // ─── DATA ───────────────────────────────────────────────────────────────────
 const VOERTUIGEN = [
-  {id:'peugeot',naam:'Peugeot 406',kenteken:'03-FS-HR',jaar:2000,type:'Automaat',kleur:'#3b82f6'},
-  {id:'ford',   naam:'Ford Focus', kenteken:'91-PF-BL',jaar:null, type:'',        kleur:'#10b981'},
+  {id:'peugeot',naam:'Peugeot 406',kenteken:'03-FS-HR',jaar:2000,type:'Automaat',kleur:'#3b82f6',verbruik:10.5},
+  {id:'ford',   naam:'Ford Focus', kenteken:'91-PF-BL',jaar:null, type:'',        kleur:'#10b981',verbruik:8.0},
 ];
 const CATEGORIEEN = [
   {naam:'Onderhoud',kleur:'#3b82f6',emoji:'🔧'},
@@ -158,7 +158,6 @@ const LANDEN = [
 
 const defaultData = {
   prijzen:    {nl:2.14, de:2.00, be:1.74},
-  kostenPerKm:0.25,
   apk: {peugeot:'', ford:''},
   tankbeurten:[],
   kosten:[],
@@ -199,14 +198,16 @@ function nav(tab){
 }
 
 // ─── VOORDEEL BEREKENING ─────────────────────────────────────────────────────
-function berekenVoordeel(liters, landId, prijsBetaald, ritKm){
+function berekenVoordeel(liters, landId, prijsBetaald, ritKm, voertuigId){
   const nlPrijs = state.prijzen.nl;
   const nlKosten = liters * nlPrijs;
   const betaaldKosten = liters * prijsBetaald;
   const brutoBesparing = nlKosten - betaaldKosten;
-  const ritKosten = (ritKm||0) * state.kostenPerKm;
+  const vt = getVt(voertuigId||'peugeot');
+  const verbruik = vt ? vt.verbruik : 10.5;
+  const ritKosten = (ritKm||0) * (verbruik/100) * nlPrijs;
   const nettoBesparing = brutoBesparing - ritKosten;
-  return {nlKosten, betaaldKosten, brutoBesparing, ritKosten, nettoBesparing};
+  return {nlKosten, betaaldKosten, brutoBesparing, ritKosten, nettoBesparing, verbruik};
 }
 
 // ─── RENDER ──────────────────────────────────────────────────────────────────
@@ -404,7 +405,7 @@ function renderTanken(){
           <div class="sav-row"><span class="sav-label">NL prijs zou zijn</span><span class="sav-val">${fmt(voordeel.nlKosten)}</span></div>
           <div class="sav-row"><span class="sav-label">Betaald in ${land.naam}</span><span class="sav-val">${fmt(voordeel.betaaldKosten)}</span></div>
           <div class="sav-row"><span class="sav-label">Bruto besparing</span><span class="sav-val" style="color:${voordeel.brutoBesparing>0?'#34d399':'#f87171'}">${fmt(voordeel.brutoBesparing)}</span></div>
-          ${t.ritKm?`<div class="sav-row"><span class="sav-label">Rijkosten rit (${t.ritKm} km × €${fmtN(state.kostenPerKm,2)})</span><span class="sav-val" style="color:#f87171">- ${fmt(voordeel.ritKosten)}</span></div>`:''}
+          ${t.ritKm?`<div class="sav-row"><span class="sav-label">Rijkosten rit (${t.ritKm} km, ${fmtN(voordeel.verbruik||10.5,1)}L/100km)</span><span class="sav-val" style="color:#f87171">- ${fmt(voordeel.ritKosten)}</span></div>`:''}
           <div style="height:1px;background:rgba(255,255,255,.1);margin:6px 0"></div>
           <div class="sav-row"><span class="sav-label" style="font-weight:700;color:var(--txt)">Netto voordeel</span><span class="sav-val" style="font-size:16px;color:${pos?'#34d399':'#f87171'}">${pos?'+':''}${fmt(voordeel.nettoBesparing)}</span></div>
         </div>`;
@@ -432,7 +433,7 @@ function renderRitten(){
   const alleRitten = [...state.ritten].sort((a,b)=>b.datum.localeCompare(a.datum));
   const ritten = filterVt==='alle' ? alleRitten : alleRitten.filter(r=>r.voertuig===filterVt);
   const totKm = ritten.reduce((s,r)=>s+r.km,0);
-  const totKosten = ritten.reduce((s,r)=>s+r.km*state.kostenPerKm,0);
+  const totKosten = ritten.reduce((s,r)=>{ const vt=getVt(r.voertuig||'peugeot'); return s+r.km*(vt?.verbruik||10.5)/100*state.prijzen.nl; },0);
 
   const DOELEN = ['Werk','Privé','Familie','Medisch','Vakantie','Boodschappen','Overig'];
 
@@ -512,7 +513,7 @@ function renderRitten(){
     ritten.forEach(r=>{
       const kleuren = {Werk:'#3b82f6',Privé:'#10b981',Familie:'#8b5cf6',Medisch:'#ef4444',Vakantie:'#f59e0b',Boodschappen:'#06b6d4',Overig:'#6b7280'};
       const kl = kleuren[r.doel]||'#6b7280';
-      const ritKosten = r.km * state.kostenPerKm;
+      const vt3 = getVt(r.voertuig||'peugeot'); const ritKosten = r.km * (vt3?.verbruik||10.5) / 100 * state.prijzen.nl;
       const vt2 = getVt(r.voertuig||'peugeot');
       html += `<div class="card" style="margin-bottom:8px;border-left:3px solid ${kl}">
         <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:6px">
@@ -673,7 +674,7 @@ function renderKosten(){
 
 // ─── INSTELLINGEN ────────────────────────────────────────────────────────────
 function renderInstellingen(){
-  const {prijzen, kostenPerKm} = state;
+  const {prijzen} = state;
   const apiKey = localStorage.getItem('anthropic_api_key')||'';
   const lastFetch = localStorage.getItem('prijzen_last_fetch')||'';
 
@@ -725,22 +726,13 @@ function renderInstellingen(){
     </div>
   </div>
 
-  <div class="section-title">Rijkosten</div>
-  <div class="card" style="margin-bottom:14px">
-    <p style="font-size:12px;color:var(--txt3);margin-bottom:10px">Kosten per kilometer voor rit-berekening bij buitenlandse tankbeurten (brandstof + slijtage)</p>
-    <div class="form-group" style="margin-bottom:0">
-      <label class="lbl">Kosten per km (€)</label>
-      <input class="inp" type="number" step="0.01" min="0" value="${fmtN(kostenPerKm,2).replace(',','.')}"
-        onchange="updateKostenPerKm(this.value)">
-    </div>
-  </div>
-
   <div class="section-title">Auto's</div>`;
 
   VOERTUIGEN.forEach(v=>{
     html += `<div class="card" style="border-left:3px solid ${v.kleur};margin-bottom:10px">
       <div style="font-family:'Syne',sans-serif;font-size:15px;font-weight:700;color:var(--txt)">${v.naam}</div>
       <div style="margin-top:4px"><span class="kenteken">${v.kenteken}</span>${v.jaar?` <span style="font-size:12px;color:var(--txt3);margin-left:6px">${v.jaar} · ${v.type}</span>`:''}</div>
+      <div style="font-size:12px;color:var(--txt3);margin-top:6px">⛽ Verbruik: ${v.verbruik} L/100km &nbsp;·&nbsp; ~€${fmtN(v.verbruik/100*state.prijzen.nl,2)}/km</div>
     </div>`;
   });
 
@@ -1120,10 +1112,6 @@ function updatePrijs(landId, val){
   if(!isNaN(n)&&n>0){ state.prijzen[landId]=n; save(); }
 }
 
-function updateKostenPerKm(val){
-  const n = parseFloat(val);
-  if(!isNaN(n)&&n>=0){ state.kostenPerKm=n; save(); }
-}
 
 function maakBackup(){
   const datum = new Date().toISOString().slice(0,10);
