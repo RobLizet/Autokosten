@@ -758,7 +758,7 @@ function renderInstellingen(){
       🛣️ <strong style="color:var(--txt)">${nRit}</strong> ritten &nbsp;·&nbsp;
       💶 <strong style="color:var(--txt)">${nKost}</strong> kosten &nbsp;·&nbsp;
       ✅ <strong style="color:var(--txt)">${nApk}</strong> APK-data
-      ${lastBackup ? `<br>📅 Laatste backup: <span style="color:#34d399">${lastBackup}</span>` : '<br><span style="color:#f59e0b">⚠️ Nog geen backup gemaakt</span>'}
+      ${lastBackup ? '<br>📅 Laatste backup: <span style="color:#34d399">'+lastBackup+'</span>' : '<br><span style="color:#f59e0b">⚠️ Nog geen backup gemaakt</span>'}
     </div>
     <button class="btn btn-primary btn-full" style="margin-bottom:8px" onclick="maakBackup()">💾 Backup downloaden</button>
     <label class="btn btn-secondary btn-full" style="display:flex;align-items:center;justify-content:center;gap:8px;cursor:pointer;margin-bottom:8px">
@@ -769,7 +769,7 @@ function renderInstellingen(){
   </div>
 
   <div style="text-align:center;padding:20px 0;color:var(--txt3);font-size:11px">AutoKosten Rob v1.1 · PWA</div>
-  </div></div>\`;
+  </div></div>`;
   return html;
 }
 
@@ -1157,7 +1157,8 @@ function herstelBackup(event){
         alert('❌ Ongeldig backup-bestand. Kies een AutoKosten backup JSON.');
         return;
       }
-      if(!confirm(`Backup terugzetten van ${parsed.datum ? new Date(parsed.datum).toLocaleString('nl-NL') : 'onbekende datum'}?\n\nHuidige data wordt overschreven.`)) return;
+      const backupDatum = parsed.datum ? new Date(parsed.datum).toLocaleString('nl-NL') : 'onbekende datum';
+      if(!confirm('Backup terugzetten van ' + backupDatum + '?\n\nHuidige data wordt overschreven.')) return;
       // Merge met defaults zodat nieuwe velden niet ontbreken
       state = Object.assign({}, defaultData, herstelData);
       if(!state.ritten) state.ritten = [];
