@@ -1,4 +1,4 @@
-const CACHE = 'autokosten-v2';
+const CACHE = 'autokosten-v3';
 const ASSETS = [
   '/Autokosten/',
   '/Autokosten/index.html',
