@@ -1,0 +1,33 @@
+FOCUS AUTOKOSTEN
+================
+Mobiele PWA voor jouw Ford Focus uit 2004.
+
+MOGELIJKHEDEN
+- Tankbeurten met datum, liters, bedrag, kilometerstand en volle tank.
+- Brandstofverbruik in liters per 100 km op basis van de volle-tankmethode.
+- Reparaties, onderhoud, APK, verzekeringen, wegenbelasting, banden, parkeren en overige kosten.
+- Kilometervergoeding (aantal km maal eigen tarief) en losse benzinevergoeding.
+- Dashboard met netto kosten = uitgaven min ontvangen vergoedingen.
+- APK-vervaldatum en waarschuwing in de app.
+- CSV-export, volledige JSON-back-up en terugzetten.
+- Werkt offline na eerste bezoek en houdt gegevens op je apparaat.
+
+INSTALLEREN OP TELEFOON
+1. Publiceer de map op een HTTPS-website, bijvoorbeeld met GitHub Pages of Netlify.
+2. Open die website in Chrome op Android.
+3. Open het browsermenu en kies 'Toevoegen aan startscherm' of 'App installeren'.
+4. Je kunt de app nu als losse app openen.
+
+TESTEN OP JE PC
+- Open index.html in je browser voor een snelle test (zonder offline serviceworker).
+- Of start vanuit deze map: python -m http.server 8080
+- Open op dezelfde pc: http://localhost:8080
+
+BELANGRIJK
+De invoer staat in localStorage van de browser op dat apparaat.
+Bij verwijderen van app/browsergegevens of wisselen van websiteadres kan de invoer verdwijnen.
+Maak daarom geregeld een back-up in 'Mijn auto'.
+
+Niet inbegrepen: automatische uitwisseling met bank, benzinepomp, salarisadministratie of RDW.
+Een APK-herinnering verschijnt zodra je de app opent, geen automatische pushmelding.
+Het standaard kilometertarief van 0,23 euro is een bewerkbare beginwaarde, geen uitspraak over je recht op vergoeding.
